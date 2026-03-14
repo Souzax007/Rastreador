@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>📍 Tracker Universal</title>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<style>
+
+body{
+    font-family: Arial;
+    background:#1e1e2f;
+    color:white;
+    padding:20px;
+}
+
+h1{
+    margin-bottom:20px;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+    background:#2c2c3f;
+}
+
+th,td{
+    padding:10px;
+    border:1px solid #444;
+    text-align:left;
+    font-size:13px;
+}
+
+th{
+    background:#3b3b55;
+}
+
+.online{
+    color:#00ff88;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>📍 Tracker Universal</h1>
+
+<p>Dispositivos conectados: <span id="total">0</span></p>
+
+<table>
+
+<thead>
+<tr>
+<th>ID</th>
+<th>IP</th>
+<th>Cidade</th>
+<th>GPS</th>
+<th>Precisão</th>
+<th>Plataforma</th>
+<th>Navegador</th>
+<th>Tela</th>
+<th>Timezone</th>
+<th>Conexão</th>
+<th>Última Atualização</th>
+</tr>
+</thead>
+
+<tbody id="devices"></tbody>
+
+</table>
+
+<script>
+
+const socket = io();
+
+let userId = "device_" + Date.now();
+
+async function trackEverything(){
+
+    const data = {
+
+        id: userId,
+        timestamp: new Date().toLocaleString(),
+
+        userAgent: navigator.userAgent,
+        language: navigator.language,
+        platform: navigator.platform,
+        screen: screen.width+"x"+screen.height,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+
+        connection: navigator.connection ? {
+            type:navigator.connection.effectiveType,
+            downlink:navigator.connection.downlink
+        } : null
+
+    };
+
+    // GPS
+    if(navigator.geolocation){
+
+        navigator.geolocation.getCurrentPosition(
+
+            pos =>{
+
+                data.gps = {
+                    lat: pos.coords.latitude.toFixed(6),
+                    lng: pos.coords.longitude.toFixed(6),
+                    accuracy: pos.coords.accuracy
+                };
+
+                sendTracking(data);
+
+            },
+
+            ()=>sendTracking(data),
+
+            {enableHighAccuracy:true,timeout:3000}
+
+        );
+
+    }else{
+
+        sendTracking(data);
+
+    }
+
+    // IP + GEO
+    try{
+
+        const ipRes = await fetch("https://api.ipify.org?format=json");
+        const ipData = await ipRes.json();
+
+        data.ip = ipData.ip;
+
+        const geoRes = await fetch(`https://ipapi.co/${ipData.ip}/json/`);
+        const geoData = await geoRes.json();
+
+        data.geoIP = {
+
+            city: geoData.city,
+            region: geoData.region,
+            country: geoData.country_name
+
+        };
+
+    }catch(e){}
+
+    sendTracking(data);
+
+}
+
+function sendTracking(data){
+
+    socket.emit("gps_tracking",data);
+
+}
+
+setInterval(trackEverything,3000);
+
+socket.on("connect",()=>{
+
+    console.log("🟢 conectado");
+
+    trackEverything();
+
+});
+
+socket.on("usuariosOnline",(users)=>{
+
+    document.getElementById("total").innerText = users.length;
+
+    const tbody = document.getElementById("devices");
+
+    tbody.innerHTML="";
+
+    users.forEach(u=>{
+
+        const tr=document.createElement("tr");
+
+        tr.innerHTML=`
+
+        <td>${u.id || "-"}</td>
+
+        <td>${u.ip || "-"}</td>
+
+        <td>${u.geoIP ? u.geoIP.city+" / "+u.geoIP.country : "-"}</td>
+
+        <td>${u.gps ? u.gps.lat+", "+u.gps.lng : "-"}</td>
+
+        <td>${u.gps ? u.gps.accuracy+" m" : "-"}</td>
+
+        <td>${u.platform || "-"}</td>
+
+        <td>${u.userAgent ? u.userAgent.substring(0,40) : "-"}</td>
+
+        <td>${u.screen || "-"}</td>
+
+        <td>${u.timezone || "-"}</td>
+
+        <td>${u.connection ? u.connection.type : "-"}</td>
+
+        <td>${u.lastUpdate || u.timestamp || "-"}</td>
+
+        `;
+
+        tbody.appendChild(tr);
+
+    });
+
+});
+
+</script>
+
+</body>
+
+</html>
